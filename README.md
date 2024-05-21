@@ -51,8 +51,11 @@ LIMIT 1;
 4. Print the names of the films that are not in the inventory. Write a query without using the IN operator.
 ```sql
 SELECT * FROM film
-LEFT JOIN inventory invent ON invent.film_id = film.film_id
-WHERE invent.film_id IS NULL;
+WHERE NOT EXISTS (
+	SELECT 1
+	FROM inventory 
+	WHERE inventory.film_id = film.film_id
+)
 ```
 5. Вывести топ 3 актеров, которые больше всего появлялись в фильмах в категории “Children”. Если у нескольких актеров одинаковое кол-во фильмов, вывести всех.
 ```sql
@@ -83,9 +86,9 @@ ORDER BY inactive_customer DESC;
 ```
 7. Display the category of films that has the largest number of total rental hours in cities (customer.address_id in this city), and which begin with the letter "a".Do the same for cities that have the “-” symbol. Write everything in one request.
 ```sql
-(
-	SELECT category.name,
-	SUM(EXTRACT(HOUR FROM (rent.return_date - rent.rental_date))) AS total_rent_in_hours
+WITH category_hours AS (
+SELECT category.name AS category_name, city.city AS city_name,
+	EXTRACT(HOUR FROM (rent.return_date - rent.rental_date)) AS rent_in_hours
 	FROM category
 JOIN film_category fc ON fc.category_id = category.category_id
 JOIN film ON fc.film_id = film.film_id
@@ -94,26 +97,25 @@ JOIN rental rent ON rent.inventory_id = inventory.inventory_id
 JOIN customer ON customer.customer_id = rent.customer_id
 JOIN address ON address.address_id = customer.address_id
 JOIN city ON city.city_id = address.city_id
-WHERE city.city ILIKE 'A%'
-GROUP BY category.name
+)
+
+(
+SELECT category_name, 
+SUM(rent_in_hours) AS total_rent_in_hours
+FROM category_hours
+WHERE city_name ILIKE 'A%'
+GROUP BY category_name
 ORDER BY total_rent_in_hours DESC
-	LIMIT 1
+LIMIT 1
 )
 UNION ALL 
 (
-SELECT category.name,
-	SUM(EXTRACT(HOUR FROM (rent.return_date - rent.rental_date))) AS total_rent_in_hours
-	FROM category
-JOIN film_category fc ON fc.category_id = category.category_id
-JOIN film ON fc.film_id = film.film_id
-JOIN inventory ON inventory.film_id = film.film_id
-JOIN rental rent ON rent.inventory_id = inventory.inventory_id
-JOIN customer ON customer.customer_id = rent.customer_id
-JOIN address ON address.address_id = customer.address_id
-JOIN city ON city.city_id = address.city_id
-WHERE city.city LIKE '%-%'
-GROUP BY category.name
+SELECT category_name,
+SUM(rent_in_hours) AS total_rent_in_hours
+FROM category_hours
+WHERE city_name LIKE '%-%'
+GROUP BY category_name
 ORDER BY total_rent_in_hours DESC
-	LIMIT 1
+LIMIT 1
 	);
 ```
