@@ -83,13 +83,11 @@ ORDER BY inactive_customer DESC
 --7. Вывести категорию фильмов, у которой самое большое кол-во часов суммарной аренды в городах (customer.address_id в этом city), и которые начинаются на букву “a”. 
 --То же самое сделать для городов в которых есть символ “-”. Написать все в одном запросе.
 
-WITH category_hours AS (
-    SELECT 
-        category.name AS category_name,
-        city.city AS city_name,
-       SUM(EXTRACT(HOUR FROM (rent.return_date - rent.rental_date)))
-	AS rent_sum
-    FROM category
+WITH category_rent AS ( 
+	SELECT category.name AS category_name,
+       SUM(CASE WHEN "city".city LIKE 'a%' THEN "film".rental_duration  ELSE 0 END) as rent_a,
+       SUM(CASE WHEN "city".city LIKE '%-%' THEN "film".rental_duration  ELSE 0 END) as rent_
+FROM category
     JOIN film_category fc ON fc.category_id = category.category_id
     JOIN film ON fc.film_id = film.film_id
     JOIN inventory ON inventory.film_id = film.film_id
@@ -97,14 +95,17 @@ WITH category_hours AS (
     JOIN customer ON customer.customer_id = rent.customer_id
     JOIN address ON address.address_id = customer.address_id
     JOIN city ON city.city_id = address.city_id
-	GROUP BY category_name, city_name
+GROUP BY "category".name
 )
-SELECT category_name,city_name,rent_sum FROM(
-SELECT category_name,city_name,rent_sum,  DENSE_RANK() OVER(PARTITION BY city_name ORDER BY rent_sum DESC) AS rank_ FROM category_hours 
-) inner_query
-WHERE rank_ = 1 AND city_name ILIKE 'A%'
+
+(
+SELECT category_name, rent_a AS rent FROM category_rent
+ORDER BY rent_a DESC
+LIMIT 1
+)
 UNION ALL
-SELECT category_name,city_name,rent_sum FROM(
-SELECT category_name,city_name,rent_sum,  DENSE_RANK() OVER(PARTITION BY city_name ORDER BY rent_sum DESC) AS rank_ FROM category_hours 
-) inner_query
-WHERE rank_ = 1 AND city_name LIKE '%-%'
+(
+SELECT category_name, rent_ AS rent  FROM category_rent
+ORDER BY rent_ DESC
+LIMIT 1
+)
