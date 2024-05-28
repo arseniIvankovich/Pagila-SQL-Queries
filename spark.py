@@ -22,7 +22,7 @@ def spark_session() -> SparkSession:
     spark = SparkSession.builder \
     .config("spark.jars", "/opt/spark/jars/postgresql-42.7.3.jar")\
     .appName("PySpark_Postgres").getOrCreate()
-    
+
     return spark
 
 
@@ -47,7 +47,7 @@ def film_and_category(category_df: pdf.DataFrame, film_category_df: pdf.DataFram
     result_df = joined_df.groupBy(category_df.name) \
                         .agg(count(film_df.film_id).alias('number_of_films')) \
                         .orderBy(col('number_of_films').desc())
-    
+                            
     return result_df
 
 def ten_actors_most_rented_count(actor_df: pdf.DataFrame, film_actor_df: pdf.DataFrame, 
@@ -172,9 +172,9 @@ def city_with_active_inactive_customers(city_df: pdf.DataFrame, address_df: pdf.
     Sort by the number of inactive clients in descending order.
     
     Args:
-        city_df (pyspark.sql.dataframe.DataFrame):  dataframe of film_actor table in postgre database
-        address_df (pyspark.sql.dataframe.DataFrame):  dataframe of film_actor table in postgre database
-        customer_df (pyspark.sql.dataframe.DataFrame):  dataframe of film_actor table in postgre database
+        city_df (pyspark.sql.dataframe.DataFrame):  dataframe of city table in postgre database
+        address_df (pyspark.sql.dataframe.DataFrame):  dataframe of address table in postgre database
+        customer_df (pyspark.sql.dataframe.DataFrame):  dataframe of customer table in postgre database
     Returns:
         pyspark.sql.dataframe.DataFrame: result dataframe
     """
@@ -198,6 +198,55 @@ def city_with_active_inactive_customers(city_df: pdf.DataFrame, address_df: pdf.
     .distinct().orderBy(col("inactive_customer").desc())
     
     return result_df
+
+def city_with_highest_rent(category_df: pdf.DataFrame, film_category_df: pdf.DataFrame, 
+                        film_df: pdf.DataFrame, inventory_df: pdf.DataFrame, 
+                        rental_df: pdf.DataFrame, customer_df: pdf.DataFrame,
+                        city_df: pdf.DataFrame, address_df: pdf.DataFrame) -> pdf.DataFrame:
+    """_summary_
+   Display the category of films that has the largest number of total 
+   rental hours in cities (customer.address_id in this city), 
+   and which begin with the letter "a".
+   Do the same for cities that have the “-” symbol. Write everything in one request.
+    
+    Args:
+        category_df (pyspark.sql.dataframe.DataFrame): dataframe of category table in postgre database
+        film_category_df (pyspark.sql.dataframe.DataFrame):  dataframe of film_category table in postgre database
+        film_df (pyspark.sql.dataframe.DataFrame):  dataframe of film table in postgre database
+        inventory_df (pyspark.sql.dataframe.DataFrame):  dataframe of inventory table in postgre database
+        rental_df (pyspark.sql.dataframe.DataFrame):  dataframe of rental table in postgre database
+        city_df (pyspark.sql.dataframe.DataFrame):  dataframe of city table in postgre database
+        address_df (pyspark.sql.dataframe.DataFrame):  dataframe of address table in postgre database
+        customer_df (pyspark.sql.dataframe.DataFrame):  dataframe of customer table in postgre database
+    Returns:
+        pyspark.sql.dataframe.DataFrame: result dataframe
+    """
+    
+    joined_df = category_df \
+                .join(film_category_df, category_df.category_id == film_category_df.category_id)\
+                .join(film_df, film_category_df.film_id == film_df.film_id)\
+                .join(inventory_df, film_df.film_id == inventory_df.film_id)\
+                .join(rental_df, inventory_df.inventory_id == rental_df.inventory_id)\
+                .join(customer_df, rental_df.customer_id == customer_df.customer_id) \
+                .join(address_df, customer_df.address_id == address_df.address_id) \
+                .join(city_df, address_df.city_id == city_df.city_id)
+    
+    category_rent_df = joined_df.groupBy(category_df.name) \
+    .agg(
+        sum(when(city_df.city.like("a%"), film_df.rental_duration).otherwise(0)).alias("rent_a"),
+        sum(when(city_df.city.like("%-%"), film_df.rental_duration).otherwise(0)).alias("rent_")
+    )
+    
+    rent_a_top_df = category_rent_df.orderBy(col("rent_a").desc()).limit(1) \
+    .select(col("name").alias("category_name"), col("rent_a").alias("rent"))
+
+    rent__top_df = category_rent_df.orderBy(col("rent_").desc()).limit(1) \
+        .select(col("name").alias("category_name"), col("rent_").alias("rent"))
+
+    result_df = rent_a_top_df.unionAll(rent__top_df)
+    
+    return result_df
+    
     
 def main():
     
@@ -220,12 +269,16 @@ def main():
     address_df = spark.read.jdbc(url=URL,table="address",properties=db_properties)
     customer_df = spark.read.jdbc(url=URL,table="customer",properties=db_properties)
 
+    
+
     film_and_category(category_df, film_category_df, film_df).show()
     ten_actors_most_rented_count(actor_df, film_actor_df, film_df, inventory_df, rental_df).show()
     category_most_spend_money(category_df,film_category_df, film_df, inventory_df, rental_df, payment_df).show()
     film_not_in_inventory(film_df, inventory_df).show(6)
     top_3_actor_chikdren_category(category_df, film_category_df, film_df, actor_df, film_actor_df).show()
     city_with_active_inactive_customers(city_df, address_df, customer_df).show()
+    city_with_highest_rent(category_df, film_category_df, film_df, inventory_df,\
+                           rental_df, customer_df, city_df, address_df).show()
     
 if __name__ == "__main__":
     main()
