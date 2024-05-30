@@ -1,4 +1,4 @@
-# Pagila-SQL-Queries
+# Pagila-SQL-Spark-Queries
 
  1. Display the number of films in each category, sort them in descending order.
 
